@@ -1,0 +1,70 @@
+import org.apache.tools.ant.taskdefs.condition.Os
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 21
+    buildToolsVersion "21.1.2"
+
+    defaultConfig {
+        applicationId "com.qci.ndksample2"
+        minSdkVersion 15
+        targetSdkVersion 21
+        versionCode 1
+        versionName "1.0"
+    }
+
+    //skip auto generate android.mk, use custom android.mk for make your jni library
+    sourceSets.main.jni.srcDirs = []
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    tasks.withType(com.android.build.gradle.tasks.PackageApplication) { pkgTask ->
+        pkgTask.jniFolders = new HashSet<File>()
+        pkgTask.jniFolders.add(new File(projectDir, 'libs'))
+    }
+
+    task ndkBuild(type: Exec) {
+
+        if (System.env.ANDROID_NDK_HOME == null) {
+            println "Please define ANDROID_NDK_HOME in your system."
+        }
+
+        def ndkBuild = new File(System.env.ANDROID_NDK_HOME, 'ndk-build')
+        if (Os.isFamily(Os.FAMILY_WINDOWS)) {
+            ndkBuild = new File(System.env.ANDROID_NDK_HOME, 'ndk-build.cmd')
+        }
+
+        commandLine ndkBuild,
+                'NDK_PROJECT_PATH=build/intermediates/ndk',
+                'APP_BUILD_SCRIPT=src/main/jni/Android.mk',
+                'APP_PLATFORM=android-21',
+                'NDK_OUT=build/intermediates/ndk/obj',
+                'NDK_LIBS_OUT=libs',
+                'APP_ABI=all',
+                'V=1'
+    }
+
+//    task ndkLibsToJar(type: Zip, dependsOn: 'ndkBuild', description: 'Create a JAR of the native libs') {
+//        destinationDir new File(buildDir, 'libs')
+//        baseName 'ndk-libs'
+//        extension 'jar'
+//        from(new File(buildDir, 'libs')) { include '**/*.so' }
+//        into 'lib/'
+//    }
+
+    tasks.withType(JavaCompile) {
+        compileTask -> compileTask.dependsOn ndkBuild
+    }
+
+
+}
+
+dependencies {
+    compile fileTree(dir: new File(buildDir, 'libs'), include: ['*.jar'])
+    compile 'com.android.support:appcompat-v7:21.0.3'
+}
